@@ -95,8 +95,17 @@ function entry(item: Item, actionable: string[]): Entry | null {
   return { kind: body.kind, text, pending: body.resolution?.state === 'pending' && actionable.includes(item.itemId) }
 }
 
+// A turn reads once a second for up to two hours, so one dropped connection must not lose the reply.
+// Reading is safe to repeat (sending is not): give up only after 30 failures in a row.
 async function page(sessionId: string, limit: number) {
-  return (await rpc<{ page: Page }>('agentSession.history', { sessionId, direction: 'tail', limit })).page
+  for (let left = 30; ; left--) {
+    try {
+      return (await rpc<{ page: Page }>('agentSession.history', { sessionId, direction: 'tail', limit })).page
+    } catch (error) {
+      if (!left) throw error
+      await sleep(1000)
+    }
+  }
 }
 
 // Sends `text` as the user's message; resolves with the history position it was sent after.

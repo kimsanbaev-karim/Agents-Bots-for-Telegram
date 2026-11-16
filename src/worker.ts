@@ -31,24 +31,17 @@ export default async function activate(orca: OrcaWorkerApi) {
     orca.panels.post('changed', {})
   }
 
+  const repos = async () => (await cli<{ repos: { id: string; path: string; displayName: string }[] }>(['repo', 'list'])).repos
+
   // A unit is an Orca chat: the role is its first message, and Orca keeps the conversation.
   async function launch(unit: Stored) {
     const intro = `You are unit "${unit.name}". People write to you from Telegram and see only the text of your replies once the turn ends. Do not ask questions through tools: decide yourself or ask in plain text. Reply in the language you are written to in.`
     const prompt = [intro, unit.role].filter(Boolean).join('\n\n')
     const model = unit.model ? ['--model', unit.model] : []
-    const args = [
-      'agent',
-      'launch',
-      '--agent',
-      unit.agent!,
-      '--worktree',
-      'path:' + unit.dir,
-      '--surface',
-      'chat',
-      ...model,
-      '--prompt',
-      prompt
-    ]
+    // A folder project can hold several workspaces on one path, so `path:` is ambiguous there: name the project's own one.
+    const repo = (await repos()).find(r => r.path === unit.dir)
+    const where = repo ? `id:${repo.id}::${repo.path}` : 'path:' + unit.dir
+    const args = ['agent', 'launch', '--agent', unit.agent!, '--worktree', where, '--surface', 'chat', ...model, '--prompt', prompt]
     const result = await cli<{ outcome?: { kind: string; sessionId: string }; receipt?: { detail?: string } }>(args)
     if (result.outcome?.kind !== 'structured') {
       throw new Error('Orca opened a terminal instead of a chat: ' + (result.receipt?.detail || 'no reason given'))
@@ -159,10 +152,7 @@ export default async function activate(orca: OrcaWorkerApi) {
   }
 
   orca.panels.handle('state', state)
-  orca.panels.handle('projects', async () => {
-    const { repos } = await cli<{ repos: { path: string; displayName: string }[] }>(['repo', 'list'])
-    return repos.map(r => ({ value: r.path, label: `${r.displayName} · ${r.path}` }))
-  })
+  orca.panels.handle('projects', async () => (await repos()).map(r => ({ value: r.path, label: `${r.displayName} · ${r.path}` })))
 
   orca.panels.handle('unit.save', async input => {
     const name = String(input.name || '').trim()
