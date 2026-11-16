@@ -1,4 +1,6 @@
 // Telegram Bot API over fetch: https://core.telegram.org/bots/api
+import { readFile } from 'node:fs/promises'
+import { basename } from 'node:path'
 
 export type Bot = { id: number; username: string }
 export type Update = {
@@ -44,6 +46,26 @@ export async function tg<T>(token: string, method: string, body = {}, signal?: A
   })
 }
 
+// Uploads a local file as the bot: a video plays in the chat, anything else arrives as a document.
+// ponytail: the whole file is read into memory; bots may upload up to 50 MB, so that is the ceiling.
+export async function tgFile(token: string, file: string, fields: Record<string, string | number>) {
+  const video = /\.(mp4|mov|m4v)$/i.test(file)
+  const form = new FormData()
+  for (const [key, value] of Object.entries(fields)) if (value !== '') form.set(key, String(value))
+  if (video) form.set('supports_streaming', 'true')
+  form.set(video ? 'video' : 'document', new Blob([await readFile(file)]), basename(file))
+  let response
+  try {
+    const url = `https://api.telegram.org/bot${token}/${video ? 'sendVideo' : 'sendDocument'}`
+    response = await fetch(url, { method: 'POST', body: form, signal: AbortSignal.timeout(600000) })
+  } catch {
+    // Never rethrow the fetch error: its text can carry the URL, and the URL holds the token.
+    throw new Error('Telegram is unreachable')
+  }
+  const data = await response.json().catch(() => ({}))
+  if (!data.ok) throw new Error(`Telegram: ${data.description || response.status}`)
+}
+
 // Splits a reply into Telegram-sized messages, preferring paragraph, line, then word boundaries.
 export function chunks(text: string, max = 4096) {
   const parts = []
@@ -60,13 +82,16 @@ export function chunks(text: string, max = 4096) {
 // A post a unit's automation left in the outbox: which unit speaks, where, and what it says.
 // Throws on a file that is not one, so a malformed file is set aside instead of being half-sent.
 export function outgoing(raw: string) {
-  const { unit, chat_id, thread_id, text } = JSON.parse(raw)
+  const { unit, chat_id, thread_id, text = '', file } = JSON.parse(raw)
   const whole = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n)
   if (typeof unit !== 'string' || !unit.trim()) throw new Error('"unit" must name a unit')
   if (!whole(chat_id)) throw new Error('"chat_id" must be a number')
   if (thread_id !== undefined && !whole(thread_id)) throw new Error('"thread_id" must be a number')
-  if (typeof text !== 'string' || !text.trim()) throw new Error('"text" must not be empty')
-  return { unit: unit.trim(), place: { chat_id, ...(thread_id === undefined ? {} : { message_thread_id: thread_id }) }, text }
+  if (file !== undefined && (typeof file !== 'string' || !file.trim())) throw new Error('"file" must be a path')
+  if (typeof text !== 'string' || (!file && !text.trim())) throw new Error('"text" must not be empty')
+  if (file && text.length > 1024) throw new Error('A caption is at most 1024 characters')
+  const place = { chat_id, ...(thread_id === undefined ? {} : { message_thread_id: thread_id }) }
+  return { unit: unit.trim(), place, text, ...(file ? { file } : {}) }
 }
 
 // Who may command an agent that runs with full permissions: anyone in a group who mentions the bot or replies

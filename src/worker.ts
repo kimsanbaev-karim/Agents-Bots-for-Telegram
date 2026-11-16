@@ -4,7 +4,7 @@ import { cli, stopAll } from './orca.ts'
 import { mkdir, readdir, readFile, rename, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { tg, chunks, accept, outgoing, type Bot, type Message, type Update } from './telegram.ts'
+import { tg, tgFile, chunks, accept, outgoing, type Bot, type Message, type Update } from './telegram.ts'
 import { chatSend, chatSettle } from './chat.ts'
 
 type Stored = Omit<Unit, 'id' | 'connected' | 'error'>
@@ -233,7 +233,8 @@ export default async function activate(orca: OrcaWorkerApi) {
           const id = Object.keys(units).find(key => key === post.unit || units[key].name.toLowerCase() === wanted)
           const token = id && (await orca.secrets.get('token:' + id))
           if (!token) throw new Error(`No unit "${post.unit}" with a bot token`)
-          for (const part of chunks(post.text)) await tg(token, 'sendMessage', { ...post.place, text: part })
+          if (post.file) await tgFile(token, post.file, { ...post.place, caption: post.text })
+          else for (const part of chunks(post.text)) await tg(token, 'sendMessage', { ...post.place, text: part })
           await unlink(taken)
         } catch (error) {
           await rename(taken, file + '.failed').catch(() => {})
