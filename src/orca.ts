@@ -1,10 +1,12 @@
-import { execFile } from 'node:child_process'
+import { execFile, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 
-const children = new Set()
-export function stopAll() { for (const child of children) child.kill() }
+const children = new Set<ChildProcess>()
+export function stopAll() {
+  for (const child of children) child.kill()
+}
 
 // Orca starts plugin workers without the per-user folders its CLI needs on Windows.
 function hostEnv() {
@@ -26,19 +28,23 @@ function command() {
 }
 
 // Runs `orca <args> --json` on this machine's Orca without a shell and resolves with its `result`.
-export function cli(args) {
+export function cli<T>(args: string[]) {
   const argv = [...args, '--environment', 'local', '--json']
   const options = { env: hostEnv(), windowsHide: true, timeout: 90000, maxBuffer: 16 * 1024 * 1024 }
-  return new Promise((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     const child = execFile(command(), argv, options, (error, stdout) => {
       children.delete(child)
       let response
-      try { response = JSON.parse(stdout) } catch { return reject(new Error(`Orca CLI gave no answer (${error?.code ?? 'empty output'})`)) }
-      // A wait that times out exits 1 but still prints its result, so trust the JSON, not the exit code.
+      try {
+        response = JSON.parse(stdout)
+      } catch {
+        return reject(new Error(`Orca CLI gave no answer (${error?.code ?? 'empty output'})`))
+      }
+      // The JSON is the answer, whatever the exit code.
       if (response.ok) return resolve(response.result)
-      reject(Object.assign(new Error(response.error?.message || 'Orca refused the operation'), { code: response.error?.code }))
+      reject(new Error(response.error?.message || 'Orca refused the operation'))
     })
     children.add(child)
-    child.stdin.end()
+    child.stdin?.end()
   })
 }

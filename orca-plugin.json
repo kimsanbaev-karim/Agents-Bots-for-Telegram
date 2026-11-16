@@ -12,7 +12,7 @@
     "orca": ">=1.4.256"
   },
   "pluginApi": 1,
-  "main": "src/worker.mjs",
+  "main": "src/worker.ts",
   "contributes": {
     "panels": [
       {
