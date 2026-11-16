@@ -52,7 +52,7 @@ orca plugin open kimsanbaev-karim.telegram-connect
 - **Внутренний протокол Orca.** У плагинов Orca пока нет способа написать в чат агента, а команду
   `orca chat send` откатили до релиза ([PR #41241](https://github.com/stablyai/orca/pull/41241)).
   Поэтому плагин сам подключается к локальному сокету Orca с её токеном доступа и вызывает
-  `agentSession.send` и `agentSession.history` (`src/chat.mjs`). Orca не обещает стабильности
+  `agentSession.send` и `agentSession.history` (`src/chat.ts`). Orca не обещает стабильности
   этих вызовов: после её обновления доставка может сломаться, тогда бот ответит «Not delivered».
 - **Только эта машина.** Юнит работает в той Orca, где установлен плагин.
 - **Только текст и только в группах.** Бот слушает любого участника группы, который упомянул
@@ -80,13 +80,16 @@ orca plugin open kimsanbaev-karim.telegram-connect
 ## Разработка
 
 ```sh
-orca plugin types .      # типы для src/panel.tsx в .orca/types
-node --test
+npm ci
+orca plugin types .      # типы Orca в .orca/types, нужны для tsc
+npx tsc                  # проверка типов
+npm run check            # eslint, prettier и тесты
 orca plugin validate .
 orca plugin check .
 ```
 
-Зависимостей и сборки нет.
+Код написан на TypeScript и загружается Orca без сборки. Зависимости нужны только для проверок;
+для тестов нужен Node.js 22.18 или новее.
 
 [Orca plugins](https://github.com/stablyai/orca/blob/main/docs/reference/plugin-authoring.md) ·
 [Telegram Bot API](https://core.telegram.org/bots/api)
