@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { chunks, accept, type Update } from '../src/telegram.ts'
+import { chunks, accept, outgoing, type Update } from '../src/telegram.ts'
 import { answerTo } from '../src/chat.ts'
 
 test('long replies split on boundaries, lose nothing and fit Telegram', () => {
@@ -40,4 +40,12 @@ test('the answer is what follows our message, never an older reply', () => {
     bot('ответ')
   ])
   assert.deepEqual(answerTo([bot('хвост')], 'Юра: привет', true), [bot('хвост')]) // our message scrolled out of the page
+})
+
+test('an outbox file names a unit, a place and a text, or is refused whole', () => {
+  const file = (patch = {}) => JSON.stringify({ unit: ' Праймер ', chat_id: -100, thread_id: 7, text: 'Статус', ...patch })
+  assert.deepEqual(outgoing(file()), { unit: 'Праймер', place: { chat_id: -100, message_thread_id: 7 }, text: 'Статус' })
+  assert.deepEqual(outgoing(file({ thread_id: undefined })).place, { chat_id: -100 })
+  for (const bad of [{ unit: '' }, { chat_id: '-100' }, { thread_id: 'x' }, { text: ' ' }]) assert.throws(() => outgoing(file(bad)))
+  assert.throws(() => outgoing('not json'))
 })

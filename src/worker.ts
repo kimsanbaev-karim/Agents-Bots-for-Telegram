@@ -1,7 +1,10 @@
 import type { OrcaWorkerApi } from 'orca/worker'
 import type { State, Unit } from './contracts.ts'
 import { cli, stopAll } from './orca.ts'
-import { tg, chunks, accept, type Bot, type Message, type Update } from './telegram.ts'
+import { mkdir, readdir, readFile, rename, unlink } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { tg, chunks, accept, outgoing, type Bot, type Message, type Update } from './telegram.ts'
 import { chatSend, chatSettle } from './chat.ts'
 
 type Stored = Omit<Unit, 'id' | 'connected' | 'error'>
@@ -12,10 +15,14 @@ const TURN_MS = 2 * 60 * 60 * 1000
 const AGENTS = ['claude', 'codex']
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const loops = new Map<string, AbortController>() // unit id → its Telegram poll
+// Where a unit's automation leaves posts for its bot: the token never leaves the plugin's secrets.
+const OUTBOX = join(homedir(), '.telegram-connect', 'outbox')
+let outbox: ReturnType<typeof setInterval> | undefined
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 export function deactivate() {
   for (const loop of loops.values()) loop.abort()
+  clearInterval(outbox)
   stopAll()
 }
 
@@ -207,6 +214,40 @@ export default async function activate(orca: OrcaWorkerApi) {
     changed(id)
     return state()
   })
+
+  // Posts each outbox file as its unit's bot. A file leaves the folder before it is sent, so a crash can
+  // never post it twice; one that cannot be sent stays beside it as `.failed` with the reason in `.error`.
+  // ponytail: any program of this user can post as a unit by writing here, the same trust as Orca's own socket.
+  let draining = false
+  async function drain() {
+    if (draining) return
+    draining = true
+    try {
+      for (const name of (await readdir(OUTBOX)).filter(n => n.endsWith('.json')).sort()) {
+        const file = join(OUTBOX, name)
+        const taken = file + '.sending'
+        await rename(file, taken)
+        try {
+          const post = outgoing(await readFile(taken, 'utf8'))
+          const wanted = post.unit.toLowerCase()
+          const id = Object.keys(units).find(key => key === post.unit || units[key].name.toLowerCase() === wanted)
+          const token = id && (await orca.secrets.get('token:' + id))
+          if (!token) throw new Error(`No unit "${post.unit}" with a bot token`)
+          for (const part of chunks(post.text)) await tg(token, 'sendMessage', { ...post.place, text: part })
+          await unlink(taken)
+        } catch (error) {
+          await rename(taken, file + '.failed').catch(() => {})
+          await orca.storage.set('outbox:error', `${name}: ${reason(error)}`).catch(() => {})
+        }
+      }
+    } catch {
+      // No folder yet, or it is busy: the next pass tries again.
+    } finally {
+      draining = false
+    }
+  }
+  await mkdir(OUTBOX, { recursive: true }).catch(() => {})
+  outbox = setInterval(() => void drain(), 2000)
 
   for (const [id, unit] of Object.entries(units)) if (unit.enabled && unit.sessionId) start(id, true)
   changed()

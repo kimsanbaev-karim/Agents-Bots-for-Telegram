@@ -57,6 +57,18 @@ export function chunks(text: string, max = 4096) {
   return parts
 }
 
+// A post a unit's automation left in the outbox: which unit speaks, where, and what it says.
+// Throws on a file that is not one, so a malformed file is set aside instead of being half-sent.
+export function outgoing(raw: string) {
+  const { unit, chat_id, thread_id, text } = JSON.parse(raw)
+  const whole = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n)
+  if (typeof unit !== 'string' || !unit.trim()) throw new Error('"unit" must name a unit')
+  if (!whole(chat_id)) throw new Error('"chat_id" must be a number')
+  if (thread_id !== undefined && !whole(thread_id)) throw new Error('"thread_id" must be a number')
+  if (typeof text !== 'string' || !text.trim()) throw new Error('"text" must not be empty')
+  return { unit: unit.trim(), place: { chat_id, ...(thread_id === undefined ? {} : { message_thread_id: thread_id }) }, text }
+}
+
 // Who may command an agent that runs with full permissions: anyone in a group who mentions the bot or replies
 // to it. Private chats are closed to everyone: anyone on Telegram can find a bot and write to it. Which groups
 // the bot is in is the owner's to control in BotFather (/setjoingroups). Returns null for a message that is not
