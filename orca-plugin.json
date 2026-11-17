@@ -4,7 +4,7 @@
   "execution": "trusted-worker",
   "id": "telegram-connect",
   "name": "Telegram Connect",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Talk to agents running as Orca chats through your own Telegram bots: one bot, one unit.",
   "repository": "https://github.com/kimsanbaev-karim/Agents-Bots-for-Telegram",
   "license": "MIT",

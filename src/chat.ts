@@ -89,7 +89,7 @@ function entry(item: Item, actionable: string[]): Entry | null {
     const text = texts.filter(Boolean).join('\n').trim()
     return text ? { kind: 'message', role: body.role, text } : null
   }
-  if (body.kind === 'status' && body.tone === 'error') return { kind: 'error', text: String(body.text) }
+  if (body.kind === 'status' && (body.tone === 'error' || body.tone === 'warning')) return { kind: 'error', text: String(body.text) }
   if (body.kind !== 'question' && body.kind !== 'approval') return null
   const text = body.kind === 'approval' ? body.title : (body.questions || [body]).map(q => q.question).join('\n')
   return { kind: body.kind, text, pending: body.resolution?.state === 'pending' && actionable.includes(item.itemId) }
