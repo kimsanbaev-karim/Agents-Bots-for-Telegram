@@ -12,14 +12,14 @@
     "orca": ">=1.4.256"
   },
   "pluginApi": 1,
-  "main": "src/worker.ts",
+  "main": "src_new/main.ts",
   "contributes": {
     "panels": [
       {
         "id": "connect",
         "title": "Telegram Connect",
         "icon": "bot",
-        "entry": "src/panel.tsx",
+        "entry": "src_new/ui/panel.tsx",
         "ui": "components"
       }
     ],
